@@ -9,7 +9,7 @@
 
 use std::{
     collections::VecDeque,
-    sync::{Arc, Condvar, Mutex},
+    sync::{self, Arc, Condvar, Mutex},
 };
 
 pub struct Sender<T> {
@@ -18,6 +18,7 @@ pub struct Sender<T> {
 
 pub struct Receiver<T> {
     shared: Arc<Shared<T>>,
+    buffer: VecDeque<T>,
 }
 
 struct Inner<T> {
@@ -64,12 +65,25 @@ impl<T> Sender<T> {
     }
 }
 
+impl<T> Iterator for Receiver<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.recv()
+    }
+}
+
 impl<T> Receiver<T> {
     pub fn recv(&mut self) -> Option<T> {
         let mut inner = self.shared.inner.lock().unwrap();
+        if let Some(t) = self.buffer.pop_front() {
+            return Some(t);
+        }
         loop {
             match inner.queue.pop_front() {
-                Some(t) => return Some(t),
+                Some(t) => {
+                    std::mem::swap(&mut self.buffer, &mut inner.queue);
+                    return Some(t);
+                }
                 None if inner.senders == 0 => return None,
                 None => {
                     inner = self.shared.available.wait(inner).unwrap();
@@ -109,6 +123,7 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
         },
         Receiver {
             shared: shared.clone(),
+            buffer: VecDeque::default(),
         },
     )
 }
