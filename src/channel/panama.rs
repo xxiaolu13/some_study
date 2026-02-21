@@ -9,7 +9,7 @@
 
 use std::{
     collections::VecDeque,
-    sync::{self, Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex},
 };
 
 pub struct Sender<T> {
